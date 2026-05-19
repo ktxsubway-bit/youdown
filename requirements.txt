@@ -1,5 +1,5 @@
 Flask==3.0.2
 Flask-Cors==4.0.0
-yt-dlp
+yt-dlp==2025.1.26
 requests==2.31.0
 gunicorn==21.2.0
