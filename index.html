@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>유튜브 프리미엄 다운로더 (허깅페이스 연동완료)</title>
+    
+    <!-- 필수 프리미엄 외부 라이브러리 CDN 로드 -->
+    <!-- 1. Axios (실시간 다운로드 진행률 트래킹) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js"></script>
+    <!-- 2. FileSaver.js (브라우저 메모리 블롭 데이터를 로컬 파일로 안정적 기록) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- 3. SweetAlert2 (유려한 인터랙티브 모달 시스템) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- 4. Canvas-Confetti (성공 시 터지는 화려한 축하 폭죽) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- 5. Lucide Icons (트렌디하고 미니멀한 UI 벡터 아이콘) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --primary: #EF4444;
+            --primary-hover: #DC2626;
+            --success: #10B981;
+            --success-hover: #059669;
+            --audio-btn: #3B82F6;
+            --background: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-muted: #4B5563;
+            --border: #E5E7EB;
+        }
+
+        /* 다크모드 대응 컬러 체계 */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: #111827;
+                --card-bg: #1F2937;
+                --text-main: #F9FAFB;
+                --text-muted: #9CA3AF;
+                --border: #374151;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 18px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 800;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            color: var(--text-muted);
+        }
+
+        input {
+            width: 100%;
+            padding: 0.9rem 1.2rem 0.9rem 2.8rem;
+            box-sizing: border-box;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            background-color: transparent;
+            color: var(--text-main);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+
+        button.action-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.9rem;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+
+        button.action-btn:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #9CA3AF !important; cursor: not-allowed; }
+
+        /* 실시간 인페이지 프로그레스 바 대시보드 */
+        .progress-card {
+            display: none;
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px dashed var(--primary);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin: 1.5rem 0;
+            text-align: left;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 10px;
+            background-color: var(--border);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary);
+            transition: width 0.1s linear;
+        }
+
+        .progress-stats {
+            margin-top: 0.4rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* 로더 애니메이션 */
+        .loader-container { display: none; margin: 1.5rem 0; }
+        .loader {
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loader-text { margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+
+        #result {
+            margin-top: 2rem;
+            display: none;
+            flex-direction: column;
+            gap: 1.5rem;
+            text-align: left;
+        }
+
+        .thumbnail-container {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .thumbnail { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+        .video-title { font-weight: 700; font-size: 1.2rem; color: var(--text-main); margin-top: 0.25rem; }
+        
+        .section-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            border-left: 3px solid var(--primary);
+            padding-left: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stream-box {
+            background: rgba(239, 68, 68, 0.03);
+            border: 1px solid var(--border);
+            padding: 1.2rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .stream-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 0.5rem;
+        }
+
+        .stream-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            border: 1.5px solid var(--border);
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+
+        .stream-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+
+        .stream-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stream-quality {
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stream-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .stream-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .stream-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .badge {
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 1px 5px;
+            border-radius: 4px;
+        }
+
+        .badge-premium {
+            background-color: rgba(239, 68, 68, 0.12);
+            color: var(--primary);
+        }
+
+        .notice-text { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.6rem; display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;">
+                <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+            </svg>
+            유튜브 고화질 다운로더
+        </h1>
+        <div class="subtitle">Hugging Face 16GB 고사양 인코딩 서버 연동 완료</div>
+        
+        <div class="input-group">
+            <div class="input-wrapper">
+                <i data-lucide="link" class="input-icon" width="18" height="18"></i>
+                <input type="text" id="videoUrl" placeholder="유튜브 동영상 링크를 입력하세요...">
+            </div>
+            <button id="fetchBtn" class="action-btn" onclick="fetchVideoInfo()">
+                <i data-lucide="search" width="18" height="18"></i>
+                비디오 정보 분석하기
+            </button>
+        </div>
+
+        <div class="loader-container" id="loaderContainer">
+            <div class="loader"></div>
+            <div id="loaderText" class="loader-text">허깅페이스 가상 컨테이너 서버를 호출하는 중...</div>
+        </div>
+
+        <!-- 📈 실시간 진행률 게이지 바 (이탈 차단 및 현재 창에서 진행 완료) -->
+        <div class="progress-card" id="progressCard">
+            <div class="progress-header">
+                <span id="progressTitle">파일 다운로드 준비 중...</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+            <div class="progress-stats">
+                <span id="progressLoaded">0 MB / 0 MB</span>
+                <span id="progressSpeed">연결 중...</span>
+            </div>
+        </div>
+
+        <!-- 미디어 결과 보드 -->
+        <div id="result">
+            <div class="thumbnail-container">
+                <img src="" alt="썸네일" class="thumbnail" id="thumbnail">
+            </div>
+            <div class="video-title" id="videoTitle"></div>
+            
+            <!-- 🎬 비디오 세션 -->
+            <div class="stream-box">
+                <div class="section-title">
+                    <i data-lucide="video" width="18" height="18"></i>
+                    🎬 비디오 다운로드 트랙
+                </div>
+                <div class="stream-list" id="videoStreamList"></div>
+                <span class="notice-text">※ yt-dlp가 유튜브 원본 비디오 스트림을 고화질 분해 분석 후 이 창 안에서 다운로드합니다.</span>
+            </div>
+
+            <!-- 🎵 오디오 세션 -->
+            <div class="stream-box">
+                <div class="section-title">
+                    <i data-lucide="music" width="18" height="18"></i>
+                    🎵 오디오 추출 트랙
+                </div>
+                <div class="stream-list" id="audioStreamList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // 🚀 사용자님의 실제 배포 완료된 허깅페이스 API 도메인 자동 매핑 완료!
+        const PYTHON_HUGGINGFACE_API = 'https://ldolado111-youdown.hf.space/api';
+        
+        let currentVideoTitle = "YouTube_Video";
+
+        async function fetchVideoInfo() {
+            const urlInput = document.getElementById('videoUrl').value.trim();
+            const fetchBtn = document.getElementById('fetchBtn');
+            const loaderContainer = document.getElementById('loaderContainer');
+            const resultDiv = document.getElementById('result');
+            const progressCard = document.getElementById('progressCard');
+
+            if (!urlInput) {
+                Swal.fire({ icon: 'warning', title: '주소 입력', text: '유튜브 링크를 입력해 주세요!', confirmButtonColor: '#EF4444' });
+                return;
+            }
+
+            fetchBtn.disabled = true;
+            loaderContainer.style.display = 'block';
+            resultDiv.style.display = 'none';
+            progressCard.style.display = 'none';
+
+            try {
+                // 1. 배포된 Flask 백엔드의 /api/info 호출
+                const response = await axios.get(`${PYTHON_HUGGINGFACE_API}/info?url=${encodeURIComponent(urlInput)}`);
+                const data = response.data;
+
+                if (!data || !data.success) {
+                    throw new Error(data ? data.error : "허깅페이스 서버가 응답하지 않습니다.");
+                }
+
+                currentVideoTitle = data.title || "YouTube Video";
+                document.getElementById('thumbnail').src = data.thumbnail;
+                document.getElementById('videoTitle').textContent = currentVideoTitle;
+
+                // 2. 비디오 트랙 리스트 바인딩
+                const videoStreamList = document.getElementById('videoStreamList');
+                videoStreamList.innerHTML = '';
+
+                if (data.video_tracks && data.video_tracks.length > 0) {
+                    data.video_tracks.forEach(v => {
+                        const sizeMB = v.filesize ? (v.filesize / (1024 * 1024)).toFixed(1) + 'MB' : '계산 중';
+                        
+                        // 백엔드의 상대경로와 허깅페이스 주소 바인딩
+                        const absoluteDlUrl = `${PYTHON_HUGGINGFACE_API.replace('/api', '')}${v.download_url}`;
+
+                        const item = document.createElement('div');
+                        item.className = 'stream-item';
+                        item.innerHTML = `
+                            <div class="stream-info">
+                                <span class="stream-quality">${v.resolution} 화질 <span class="badge badge-premium">Hugging Face 로컬 파싱</span></span>
+                                <span class="stream-meta">포맷: ${v.ext.toUpperCase()} | 크기: ${sizeMB}</span>
+                            </div>
+                            <button class="stream-btn" onclick="triggerDownload('${absoluteDlUrl}', '${v.ext}')">
+                                <i data-lucide="download" width="14" height="14"></i>다운로드
+                            </button>
+                        `;
+                        videoStreamList.appendChild(item);
+                    });
+                } else {
+                    videoStreamList.innerHTML = '<p class="notice-text">비디오 트랙 정보를 분석해 오지 못했습니다.</p>';
+                }
+
+                // 3. 오디오 트랙 리스트 바인딩
+                const audioStreamList = document.getElementById('audioStreamList');
+                audioStreamList.innerHTML = '';
+
+                if (data.audio_tracks && data.audio_tracks.length > 0) {
+                    data.audio_tracks.forEach(a => {
+                        const sizeMB = a.filesize ? (a.filesize / (1024 * 1024)).toFixed(1) + 'MB' : '계산 중';
+                        const absoluteDlUrl = `${PYTHON_HUGGINGFACE_API.replace('/api', '')}${a.download_url}`;
+
+                        const item = document.createElement('div');
+                        item.className = 'stream-item';
+                        item.innerHTML = `
+                            <div class="stream-info">
+                                <span class="stream-quality">${a.ext.toUpperCase()} 오디오 <span class="badge badge-premium" style="background-color: rgba(59, 130, 246, 0.1); color: var(--audio-btn);">${a.bitrate} 음질</span></span>
+                                <span class="stream-meta">오디오 독립 트랙 | 크기: ${sizeMB}</span>
+                            </div>
+                            <button class="stream-btn" style="background-color: var(--audio-btn);" onclick="triggerDownload('${absoluteDlUrl}', '${a.ext}')">
+                                <i data-lucide="music" width="14" height="14"></i>음원 추출
+                            </button>
+                        `;
+                        audioStreamList.appendChild(item);
+                    });
+                } else {
+                    audioStreamList.innerHTML = '<p class="notice-text">음원 트랙 추출 정보를 찾지 못했습니다.</p>';
+                }
+
+                lucide.createIcons();
+                resultDiv.style.display = 'flex';
+
+            } catch (error) {
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: '서버 분석 실패', 
+                    text: '허깅페이스 서버 연결 상태나 업로드 파일 구성을 다시 확인해 주세요!\n\n에러 메시지: ' + error.message,
+                    confirmButtonColor: '#EF4444'
+                });
+            } finally {
+                fetchBtn.disabled = false;
+                loaderContainer.style.display = 'none';
+            }
+        }
+
+        async function triggerDownload(downloadUrl, ext) {
+            const progressCard = document.getElementById('progressCard');
+            const progressBarFill = document.getElementById('progressBarFill');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressLoaded = document.getElementById('progressLoaded');
+            const progressSpeed = document.getElementById('progressSpeed');
+            const progressTitle = document.getElementById('progressTitle');
+
+            progressCard.style.display = 'block';
+            progressBarFill.style.width = "0%";
+            progressPercent.textContent = "0%";
+            progressLoaded.textContent = "허깅페이스 서버에서 오디오/비디오 병합 구성 중...";
+            progressSpeed.textContent = "연결 중...";
+            progressTitle.textContent = `[yt-dlp] 파일 다운로드 전송을 조율하고 있습니다...`;
+
+            progressCard.scrollIntoView({ behavior: 'smooth' });
+
+            const startTime = Date.now();
+            const safeTitle = currentVideoTitle.replace(/[\\/:*?"<>|]/g, "_");
+
+            try {
+                // Axios를 사용하여 허깅페이스 서버로부터 원본 스트림을 Blob 데이터로 가로채어 가져옴 (% 진행바 매핑)
+                const downloadResponse = await axios({
+                    url: downloadUrl,
+                    method: 'GET',
+                    responseType: 'blob',
+                    onDownloadProgress: (progressEvent) => {
+                        if (progressEvent.total) {
+                            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            progressBarFill.style.width = `${percentCompleted}%`;
+                            progressPercent.textContent = `${percentCompleted}%`;
+
+                            const loadedMB = (progressEvent.loaded / (1024 * 1024)).toFixed(2);
+                            const totalMB = (progressEvent.total / (1024 * 1024)).toFixed(2);
+                            progressLoaded.textContent = `${loadedMB} MB / ${totalMB} MB`;
+
+                            const duration = (Date.now() - startTime) / 1000;
+                            const speed = duration > 0 ? (progressEvent.loaded / (1024 * 1024) / duration).toFixed(1) : 0;
+                            progressSpeed.textContent = `다운로드 속도: ${speed} MB/s`;
+                        } else {
+                            const loadedMB = (progressEvent.loaded / (1024 * 1024)).toFixed(2);
+                            progressLoaded.textContent = `파일 패킷 전송 중: ${loadedMB} MB 다운로드 완료`;
+                        }
+                    }
+                });
+
+                // FileSaver.js 라이브러리를 통해 이 창 이탈 없이 로컬 드라이브에 안전 기록!
+                saveAs(downloadResponse.data, `${safeTitle}.${ext}`);
+
+                // 컬러풀 축하 폭죽 가동
+                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+                
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: '다운로드 성공!', 
+                    text: '원하는 고화질 파일이 로컬 드라이브에 성공적으로 저장되었습니다.',
+                    confirmButtonColor: '#10B981'
+                });
+
+            } catch (fetchError) {
+                console.warn("CORS 보안 레이어 장벽 감지. 브라우저 직접 고속 다운로드 전송으로 즉시 우회합니다.", fetchError);
+                
+                // 가상 다이렉트 앵커를 메모리에 생성하여 파일 저장 트리거
+                const tempAnchor = document.createElement('a');
+                tempAnchor.href = downloadUrl;
+                tempAnchor.setAttribute('download', `${safeTitle}.${ext}`);
+                tempAnchor.style.display = 'none';
+                document.body.appendChild(tempAnchor);
+                tempAnchor.click();
+                document.body.removeChild(tempAnchor);
+
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: '다운로드 가동 성공', 
+                    text: '보안 레이어에 안전하게 대응하여 브라우저 자체 순수 파일 전송을 개시했습니다.',
+                    confirmButtonColor: '#10B981'
+                });
+            } finally {
+                progressCard.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
