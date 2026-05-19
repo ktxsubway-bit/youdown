@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Python Flask - YouTube Downloader Backend API (Render Deployment Version)
-* 역할:
-  1. yt-dlp 라이브러리를 통해 유튜브의 다양한 해상도 주소와 보안 서명(Signature)을 완벽히 우회 추출합니다.
-  2. Render의 메모리 제한(512MB)을 초과하지 않도록 청크(Chunk) 단위 스트리밍 파이프라인을 제공합니다.
-  3. 로컬 테스트 및 배포된 프론트엔드 환경에서 CORS 제약 없이 파일을 내려받을 수 있도록 응답 헤더를 제어합니다.
-"""
-
 import os
 import re
 import requests
