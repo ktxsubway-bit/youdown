@@ -3,69 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>유튜브 다운로더 | 고화질 서버 연동</title>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <title>YouTube Ultra Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #ccc; }
-        #loader { display: none; margin: 15px 0; font-size: 14px; color: #666; }
-        .track-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Pretendard', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
     </style>
 </head>
-<body>
+<body class="p-4">
 
-<div class="card">
-    <h2>유튜브 다운로더</h2>
-    <input type="text" id="url" placeholder="유튜브 영상 링크를 입력하세요">
-    <button id="btn" onclick="process()">분석 및 다운로드</button>
-    <div id="loader">서버 분석 중... 잠시만 기다려주세요.</div>
-    <div id="result" style="margin-top:20px;"></div>
-</div>
+    <div class="glass w-full max-w-md p-8 text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">YouTube Downloader</h1>
+        
+        <div class="relative mb-4">
+            <input type="text" id="url" 
+                class="w-full px-5 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-400 transition" 
+                placeholder="유튜브 링크를 붙여넣으세요...">
+        </div>
+        
+        <button id="btn" onclick="getInfo()"
+            class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition active:scale-95">
+            영상 분석 시작
+        </button>
 
-<script>
-    // 본인의 허깅페이스 스페이스 주소를 입력하세요
-    const API_BASE = "https://ldolado111-youdown.hf.space/api";
+        <div id="loader" class="hidden mt-6 animate-pulse text-purple-600 font-medium">분석 중입니다...</div>
+        <div id="res" class="mt-6 text-left"></div>
+    </div>
 
-    async function process() {
-        const url = document.getElementById('url').value;
-        const btn = document.getElementById('btn');
-        const loader = document.getElementById('loader');
-        const result = document.getElementById('result');
+    <script>
+        async function getInfo() {
+            const url = document.getElementById('url').value;
+            const resDiv = document.getElementById('res');
+            const btn = document.getElementById('btn');
+            const loader = document.getElementById('loader');
+            
+            if (!url) return alert('유튜브 링크를 입력해주세요.');
+            
+            btn.disabled = true;
+            loader.classList.remove('hidden');
+            resDiv.innerHTML = '';
 
-        if (!url) return Swal.fire('알림', '링크를 먼저 입력해주세요!', 'warning');
+            try {
+                const API = "https://ldolado111-youdown.hf.space";
+                const response = await fetch(`${API}/api/info?url=${encodeURIComponent(url)}`);
+                const data = await response.json();
 
-        btn.disabled = true;
-        loader.style.display = 'block';
-        result.innerHTML = '';
+                if (!data.success) throw new Error(data.error);
 
-        try {
-            const res = await axios.get(`${API_BASE}/info?url=${encodeURIComponent(url)}`);
-            if (!res.data.success) throw new Error(res.data.error);
-
-            result.innerHTML = `<h3>${res.data.title}</h3>`;
-            res.data.video_tracks.forEach(track => {
-                result.innerHTML += `
-                    <div class="track-item">
-                        <span>${track.resolution} (MP4)</span>
-                        <button style="width: auto; padding: 5px 10px;" onclick="download('${API_BASE.replace('/api','')}${track.download_url}')">다운로드</button>
-                    </div>`;
-            });
-        } catch (err) {
-            Swal.fire('오류 발생', '서버 연결에 실패했습니다. 허깅페이스 스페이스가 "Running" 상태인지 확인하세요.', 'error');
-        } finally {
-            btn.disabled = false;
-            loader.style.display = 'none';
+                resDiv.innerHTML = `<h2 class="font-bold text-gray-700 mb-4 truncate">${data.title}</h2>`;
+                data.video_tracks.forEach(track => {
+                    resDiv.innerHTML += `
+                        <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg mb-2 border border-gray-100 hover:border-purple-200 transition">
+                            <span class="font-semibold text-gray-600">${track.resolution}</span>
+                            <a href="${API}${track.download_url}" target="_blank"
+                                class="text-xs bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">다운로드</a>
+                        </div>`;
+                });
+            } catch (err) {
+                resDiv.innerHTML = `<div class="text-red-500 text-sm bg-red-50 p-3 rounded-lg">에러 발생: ${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                loader.classList.add('hidden');
+            }
         }
-    }
-
-    function download(link) {
-        window.open(link, '_blank');
-    }
-</script>
-
+    </script>
 </body>
 </html>
